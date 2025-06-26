@@ -1,0 +1,247 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Click & Earn</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(to bottom right, #00c6ff, #0072ff);
+      padding: 20px;
+      margin: 0;
+      color: #333;
+    }
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: #fff;
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card h2 {
+      margin-bottom: 20px;
+      color: #0072ff;
+    }
+    input[type="email"],
+    input[type="password"],
+    input[type="text"] {
+      width: 90%;
+      padding: 12px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+    .btn {
+      background: #0072ff;
+      color: white;
+      padding: 12px 24px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 90%;
+    }
+    .btn:hover {
+      background: #005ecb;
+    }
+    .link-btn {
+      background: none;
+      border: none;
+      color: #0072ff;
+      font-size: 14px;
+      text-decoration: underline;
+      margin-top: 5px;
+      cursor: pointer;
+    }
+    #adBox {
+      margin: 20px 0;
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="card" id="loginCard">
+    <h2>Login</h2>
+    <input type="email" id="email" placeholder="Email" />
+    <input type="password" id="password" placeholder="Password" />
+    <button class="btn" onclick="login()">Login</button>
+    <button class="link-btn" onclick="toggleForm('signup')">Create an Account</button>
+    <p id="loginMsg"></p>
+  </div>
+  <div class="card" id="signupCard" style="display:none">
+    <h2>Create Account</h2>
+    <input type="email" id="signupEmail" placeholder="Email" />
+    <input type="password" id="signupPassword" placeholder="Password" />
+    <button class="btn" onclick="signup()">Sign Up</button>
+    <button class="link-btn" onclick="toggleForm('login')">Back to Login</button>
+    <p id="signupMsg"></p>
+  </div>
+  <div class="card" id="mainApp" style="display:none">
+    <h2>Welcome, <span id="userEmail"></span></h2>
+    <p style="font-size: 18px; margin: 10px 0;">Balance: <strong>Rs <span id="balance">0</span></strong></p>
+    <div id="adBox">
+      <script async="async" data-cfasync="false" src="//pl26899504.profitableratecpm.com/745e36a1105cf551516cc68731d0c89c/invoke.js"></script>
+      <div id="container-745e36a1105cf551516cc68731d0c89c"></div>
+    </div>
+    <p id="msg"></p>
+    <h3 style="margin-top:20px">Withdraw</h3>
+    <input type="text" id="withdrawName" placeholder="Account Holder Name">
+    <input type="text" id="withdrawNumber" placeholder="JazzCash/EasyPaisa Number">
+    <button class="btn" onclick="requestWithdraw()">Request Withdraw</button>
+    <p id="withdrawMsg"></p>
+    <button class="btn" onclick="logout()">Logout</button>
+  </div>
+</div>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCRm_kYUIvKk86N_nT4pDjVox_WE12dbuA",
+  authDomain: "live-81775.firebaseapp.com",
+  databaseURL: "https://live-81775-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "live-81775",
+  storageBucket: "live-81775.firebasestorage.app",
+  messagingSenderId: "4876469526",
+  appId: "1:4876469526:web:d9201bfc3aac7ec0303c37",
+  measurementId: "G-W1TRS0PPCT"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+let currentUser;
+let clickCount = 0;
+let todayDate = new Date().toLocaleDateString();
+auth.onAuthStateChanged(user => {
+  if(user){
+    currentUser = user;
+    document.getElementById('loginCard').style.display = 'none';
+    document.getElementById('signupCard').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('userEmail').textContent = user.email;
+    loadBalance();
+    loadClickCount();
+  }
+});
+function loadBalance() {
+  db.ref('users/' + currentUser.uid + '/balance').once('value', snapshot => {
+    const balance = snapshot.val() || 0;
+    document.getElementById('balance').textContent = balance;
+  });
+}
+function loadClickCount() {
+  const todayKey = new Date().toLocaleDateString();
+  db.ref('users/' + currentUser.uid + '/adClicks').once('value', snapshot => {
+    const data = snapshot.val();
+    if (data && data.date === todayKey) {
+      clickCount = data.count;
+    } else {
+      db.ref('users/' + currentUser.uid + '/adClicks').set({ date: todayKey, count: 0 });
+      clickCount = 0;
+    }
+  });
+}
+function login() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  auth.signInWithEmailAndPassword(email, password).then(user => {
+    document.getElementById('loginCard').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('userEmail').textContent = email;
+    loadBalance();
+    loadClickCount();
+  }).catch(err => {
+    document.getElementById('loginMsg').textContent = err.message;
+  });
+}
+function signup() {
+  const email = document.getElementById('signupEmail').value;
+  const password = document.getElementById('signupPassword').value;
+  auth.createUserWithEmailAndPassword(email, password).then(user => {
+    const uid = user.user.uid;
+    db.ref('users/' + uid).set({ balance: 0 });
+    toggleForm('login');
+    document.getElementById('signupMsg').textContent = 'Account created! Please login.';
+  }).catch(err => {
+    document.getElementById('signupMsg').textContent = err.message;
+  });
+}
+function toggleForm(form) {
+  document.getElementById('loginCard').style.display = form === 'login' ? 'block' : 'none';
+  document.getElementById('signupCard').style.display = form === 'signup' ? 'block' : 'none';
+}
+function logout() {
+  auth.signOut();
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginCard').style.display = 'block';
+}
+function rewardUser() {
+  const userRef = db.ref('users/' + currentUser.uid + '/balance');
+  userRef.transaction(balance => {
+    return (balance || 0) + 5;
+  }, function (error, committed, snapshot) {
+    if (error) {
+      document.getElementById('msg').textContent = 'Error: ' + error.message;
+    } else if (!committed) {
+      document.getElementById('msg').textContent = 'Transaction not committed.';
+    } else {
+      const newBalance = snapshot.val();
+      document.getElementById('balance').textContent = newBalance;
+      document.getElementById('msg').textContent = 'Rs 5 added to your balance!';
+    }
+  });
+}
+document.getElementById('container-745e36a1105cf551516cc68731d0c89c').addEventListener('click', function () {
+  if (clickCount >= 25) {
+    document.getElementById('msg').textContent = "You’ve reached the daily limit of 25 ads.";
+    return;
+  }
+  clickCount++;
+  const todayKey = new Date().toLocaleDateString();
+  db.ref('users/' + currentUser.uid + '/adClicks').set({
+    date: todayKey,
+    count: clickCount
+  });
+  rewardUser();
+});
+function requestWithdraw() {
+  const name = document.getElementById('withdrawName').value;
+  const number = document.getElementById('withdrawNumber').value;
+  const userRef = db.ref('users/' + currentUser.uid);
+  userRef.child('balance').once('value', snapshot => {
+    const balance = snapshot.val() || 0;
+    if (balance < 100) {
+      document.getElementById('withdrawMsg').textContent = 'Minimum Rs 100 required to withdraw.';
+    } else if (!number || !name) {
+      document.getElementById('withdrawMsg').textContent = 'Enter name and number';
+    } else {
+      userRef.child('balance').set(balance - 100);
+      db.ref('withdrawals').push({ uid: currentUser.uid, name, number, date: Date.now(), amount: 100 });
+      document.getElementById('balance').textContent = balance - 100;
+      document.getElementById('withdrawMsg').textContent = 'Withdraw request sent! Rs 100 deducted.';
+    }
+  });
+}
+</script>
+</body>
+</html>

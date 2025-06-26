@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Click & Earn</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f7fa;
+      color: #333;
+    }
+    .container { max-width: 480px; margin: auto; padding: 20px; }
+    .card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    .card h2 { color: #0072ff; text-align: center; }
+    input {
+      width: 100%; padding: 12px; margin: 10px 0;
+      border: 1px solid #ccc; border-radius: 12px; font-size: 15px;
+    }
+    .btn {
+      background: #0072ff; color: #fff; padding: 12px;
+      border: none; border-radius: 12px; width: 100%;
+      cursor: pointer; font-size: 16px;
+    }
+    .btn:hover { background: #0059c1; }
+    .link-btn {
+      background: none; border: none; color: #0072ff;
+      font-size: 14px; text-decoration: underline; cursor: pointer;
+    }
+    #msg, #loginMsg, #signupMsg, #withdrawMsg {
+      font-size: 14px; color: #d9534f; text-align: center; margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login -->
+    <div class="card" id="loginCard">
+      <h2>Login</h2>
+      <input type="email" id="email" placeholder="Email" />
+      <input type="password" id="password" placeholder="Password" />
+      <button class="btn" onclick="login()">Login</button>
+      <button class="link-btn" onclick="toggleForm('signup')">Create an Account</button>
+      <p id="loginMsg"></p>
+    </div>
+
+    <!-- Signup -->
+    <div class="card" id="signupCard" style="display:none">
+      <h2>Create Account</h2>
+      <input type="email" id="signupEmail" placeholder="Email" />
+      <input type="password" id="signupPassword" placeholder="Password" />
+      <button class="btn" onclick="signup()">Sign Up</button>
+      <button class="link-btn" onclick="toggleForm('login')">Back to Login</button>
+      <p id="signupMsg"></p>
+    </div>
+
+    <!-- Main App -->
+    <div class="card" id="mainApp" style="display:none">
+      <h2>Welcome, <span id="userEmail"></span></h2>
+      <p style="font-size: 18px;">Balance: <strong>Rs <span id="balance">0</span></strong></p>
+
+      <!-- Ad Box -->
+      <div style="margin: 20px 0; text-align:center;">
+        <script async data-cfasync="false" src="//pl26899504.profitableratecpm.com/745e36a1105cf551516cc68731d0c89c/invoke.js"></script>
+        <div id="container-745e36a1105cf551516cc68731d0c89c"></div>
+      </div>
+
+      <p id="msg"></p>
+
+      <!-- Withdraw Form -->
+      <h3>Withdraw</h3>
+      <input type="text" id="withdrawName" placeholder="Account Holder Name">
+      <input type="text" id="withdrawNumber" placeholder="JazzCash/EasyPaisa Number">
+      <input type="number" id="withdrawAmount" placeholder="Amount (Min Rs 100)">
+      <button class="btn" onclick="requestWithdraw()">Request Withdraw</button>
+      <p id="withdrawMsg"></p>
+
+      <!-- Withdrawal History -->
+      <h3>Withdrawal History</h3>
+      <div id="withdrawalHistory"><p>Loading...</p></div>
+
+      <button class="btn" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <script>
+    // ✅ Firebase Setup
+    const firebaseConfig = {
+      apiKey: "AIzaSyCRm_kYUIvKk86N_nT4pDjVox_WE12dbuA",
+      authDomain: "live-81775.firebaseapp.com",
+      databaseURL: "https://live-81775-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "live-81775",
+      storageBucket: "live-81775.appspot.com",
+      messagingSenderId: "4876469526",
+      appId: "1:4876469526:web:d9201bfc3aac7ec0303c37"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+    let currentUser, clickCount = 0;
+
+    // Auth State
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('loginCard').style.display = 'none';
+        document.getElementById('signupCard').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        document.getElementById('userEmail').textContent = user.email;
+        loadBalance();
+        loadClickCount();
+        loadWithdrawalHistory();
+      }
+    });
+
+    function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      auth.signInWithEmailAndPassword(email, password)
+        .catch(err => document.getElementById('loginMsg').textContent = err.message);
+    }
+
+    function signup() {
+      const email = document.getElementById('signupEmail').value;
+      const password = document.getElementById('signupPassword').value;
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(user => {
+          db.ref('users/' + user.user.uid).set({ balance: 0 });
+          toggleForm('login');
+          document.getElementById('signupMsg').textContent = 'Account created!';
+        })
+        .catch(err => document.getElementById('signupMsg').textContent = err.message);
+    }
+
+    function toggleForm(form) {
+      document.getElementById('loginCard').style.display = form === 'login' ? 'block' : 'none';
+      document.getElementById('signupCard').style.display = form === 'signup' ? 'block' : 'none';
+    }
+
+    function logout() {
+      auth.signOut().then(() => location.reload());
+    }
+
+    function loadBalance() {
+      db.ref('users/' + currentUser.uid + '/balance').once('value', snap => {
+        document.getElementById('balance').textContent = snap.val() || 0;
+      });
+    }
+
+    function loadClickCount() {
+      const todayKey = new Date().toLocaleDateString();
+      db.ref('users/' + currentUser.uid + '/adClicks').once('value', snap => {
+        const data = snap.val();
+        if (data && data.date === todayKey) {
+          clickCount = data.count;
+        } else {
+          db.ref('users/' + currentUser.uid + '/adClicks').set({ date: todayKey, count: 0 });
+          clickCount = 0;
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('container-745e36a1105cf551516cc68731d0c89c').addEventListener('click', () => {
+        if (clickCount >= 25) {
+          document.getElementById('msg').textContent = "Limit reached for today.";
+          return;
+        }
+        clickCount++;
+        const todayKey = new Date().toLocaleDateString();
+        db.ref('users/' + currentUser.uid + '/adClicks').set({ date: todayKey, count: clickCount });
+        rewardUser();
+      });
+    });
+
+    function rewardUser() {
+      const ref = db.ref('users/' + currentUser.uid + '/balance');
+      ref.transaction(bal => (bal || 0) + 5, (err, committed, snap) => {
+        if (committed) {
+          document.getElementById('balance').textContent = snap.val();
+          document.getElementById('msg').textContent = "Rs 5 added!";
+        }
+      });
+    }
+
+    function requestWithdraw() {
+      const name = document.getElementById('withdrawName').value.trim();
+      const number = document.getElementById('withdrawNumber').value.trim();
+      const amount = parseInt(document.getElementById('withdrawAmount').value);
+      const userRef = db.ref('users/' + currentUser.uid);
+
+      userRef.child('balance').once('value', snap => {
+        const balance = snap.val() || 0;
+
+        if (!name || !number || isNaN(amount)) {
+          document.getElementById('withdrawMsg').textContent = 'Fill all fields.';
+        } else if (amount < 100) {
+          document.getElementById('withdrawMsg').textContent = 'Minimum is Rs 100.';
+        } else if (amount > balance) {
+          document.getElementById('withdrawMsg').textContent = 'Not enough balance.';
+        } else {
+          userRef.child('balance').set(balance - amount);
+          db.ref('withdrawals').push({
+            uid: currentUser.uid,
+            name, number, amount,
+            date: new Date().toLocaleString(),
+            status: 'pending'
+          });
+          document.getElementById('balance').textContent = balance - amount;
+          document.getElementById('withdrawMsg').textContent = `Rs ${amount} withdrawn!`;
+          loadWithdrawalHistory();
+        }
+      });
+    }
+
+    function loadWithdrawalHistory() {
+      const div = document.getElementById('withdrawalHistory');
+      db.ref('withdrawals').orderByChild('uid').equalTo(currentUser.uid).once('value', snap => {
+        const data = snap.val();
+        if (!data) {
+          div.innerHTML = '<p>No withdrawal yet.</p>';
+          return;
+        }
+        let html = '<ul style="padding:0; list-style:none">';
+        Object.values(data).reverse().forEach(item => {
+          html += `<li style="margin-bottom:10px; padding:10px; border:1px solid #ccc; border-radius:8px;">
+            <strong>Rs ${item.amount}</strong> to ${item.number}<br>
+            <span>Status: <b style="color:${item.status==='approved'?'green':item.status==='rejected'?'red':'orange'}">${item.status}</b></span><br>
+            <small>${item.date}</small>
+          </li>`;
+        });
+        html += '</ul>';
+        div.innerHTML = html;
+      });
+    }
+  </script>
+</body>
+</html>

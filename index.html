@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Random Video Call</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    video { width: 48%; border-radius: 12px; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    body { font-family: sans-serif; text-align: center; background: #121212; color: white; }
+  </style>
+</head>
+<body>
+  <h2> Random Video Call</h2>
+  <div>
+    <video id="localVideo" autoplay muted></video>
+    <video id="remoteVideo" autoplay></video>
+  </div>
+  <button onclick="startSearch()">Find Stranger</button>
+  <button onclick="endCall()">End Call</button>
+
+  <!-- Firebase + WebRTC Scripts -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyB2k_6Z-oFTWQr8EX2PYdqQmblJLb4puJo",
+      authDomain: "rrr786-510e3.firebaseapp.com",
+      databaseURL: "https://rrr786-510e3-default-rtdb.firebaseio.com",
+      projectId: "rrr786-510e3",
+      storageBucket: "rrr786-510e3.appspot.com",
+      messagingSenderId: "745906621596",
+      appId: "1:745906621596:web:04db06feb503bd5da7b159"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const localVideo = document.getElementById("localVideo");
+    const remoteVideo = document.getElementById("remoteVideo");
+    let localStream;
+    let peer;
+    let roomId;
+
+    async function startSearch() {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localVideo.srcObject = localStream;
+      peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+      
+      peer.ontrack = event => {
+        remoteVideo.srcObject = event.streams[0];
+      };
+
+      peer.onicecandidate = e => {
+        if (e.candidate) {
+          db.ref("calls/" + roomId + "/ice").push(JSON.stringify(e.candidate));
+        }
+      };
+
+      const ref = db.ref("waiting").push({ status: "waiting" });
+      roomId = ref.key;
+
+      ref.onDisconnect().remove();
+
+      ref.on("value", async snapshot => {
+        const val = snapshot.val();
+        if (val && val.connected) {
+          makeOffer(val.connected);
+        }
+      });
+
+      db.ref("waiting").once("value", snapshot => {
+        const users = snapshot.val();
+        for (let key in users) {
+          if (key !== roomId && users[key].status === "waiting") {
+            db.ref("waiting/" + key).update({ connected: roomId });
+            break;
+          }
+        }
+      });
+    }
+
+    async function makeOffer(remoteId) {
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      db.ref("calls/" + roomId + "/offer").set(JSON.stringify(offer));
+      listenForAnswer(remoteId);
+      listenForIce(remoteId);
+    }
+
+    function listenForAnswer(remoteId) {
+      db.ref("calls/" + remoteId + "/answer").on("value", async snap => {
+        if (snap.exists()) {
+          const answer = JSON.parse(snap.val());
+          await peer.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+      });
+    }
+
+    function listenForIce(remoteId) {
+      db.ref("calls/" + remoteId + "/ice").on("child_added", snap => {
+        const ice = JSON.parse(snap.val());
+        peer.addIceCandidate(new RTCIceCandidate(ice));
+      });
+    }
+
+    async function endCall() {
+      if (peer) peer.close();
+      if (roomId) db.ref("waiting/" + roomId).remove();
+      window.location.reload();
+    }
+  </script>
+</body>
+</html>
